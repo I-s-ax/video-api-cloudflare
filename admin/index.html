@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Administración · Video API</title>
+  <style>
+    body{font-family:system-ui,sans-serif;background:#10131b;color:#eef2ff;margin:0;padding:24px}
+    main{max-width:980px;margin:auto}section{background:#1b2130;padding:20px;border-radius:14px;margin:16px 0}
+    input,button{padding:12px;border-radius:8px;border:1px solid #414b60;margin:4px;background:#111827;color:#fff}
+    button{cursor:pointer;background:#334b82}button.danger{background:#7b3038}table{width:100%;border-collapse:collapse}
+    td,th{text-align:left;padding:10px;border-bottom:1px solid #374151}small,.muted{color:#aab4c8}
+    .hidden{display:none}.actions{white-space:nowrap}.status{font-weight:600}
+  </style>
+</head>
+<body><main>
+  <h1>Video API · Administración</h1><p class="muted">Acceso exclusivo para administradores autorizados.</p>
+  <section id="login">
+    <h2>Iniciar sesión</h2>
+    <input id="email" type="email" placeholder="Correo administrador">
+    <input id="password" type="password" placeholder="Contraseña">
+    <button id="loginBtn">Entrar</button><p id="loginMsg"></p>
+  </section>
+  <section id="dashboard" class="hidden">
+    <button id="refresh">Actualizar usuarios</button><button id="logout">Cerrar sesión</button>
+    <h2>Solicitudes y usuarios</h2><p id="msg" class="muted"></p>
+    <div style="overflow-x:auto"><table><thead><tr><th>Correo</th><th>Estado</th><th>Registro</th><th>Acciones</th></tr></thead><tbody id="users"></tbody></table></div>
+  </section>
+</main>
+<script src="config.js"></script><script src="app.js"></script>
+</body></html>

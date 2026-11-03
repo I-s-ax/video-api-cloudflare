@@ -1,0 +1,12 @@
+name = "video-api-cloudflare"
+main = "src/index.ts"
+compatibility_date = "2026-11-03"
+workers_dev = true
+
+[vars]
+ADMIN_ORIGIN = "https://REPLACE_WITH_YOUR_PAGES_DOMAIN.pages.dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "video-api-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"

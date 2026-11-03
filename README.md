@@ -1,4 +1,4 @@
-# Video API privada — Cloudflare Workers + D1
+# RVideo API privada — Cloudflare Workers + D1
 
 Starter inicial para una API privada con aprobación manual de usuarios.
 
