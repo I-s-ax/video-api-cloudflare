@@ -9,4 +9,4 @@ ADMIN_ORIGIN = "https://REPLACE_WITH_YOUR_PAGES_DOMAIN.pages.dev"
 [[d1_databases]]
 binding = "DB"
 database_name = "video-api-db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "42108173-5e49-493f-89a3-927f0fe7d921"
