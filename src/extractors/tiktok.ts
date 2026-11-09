@@ -76,14 +76,17 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
   const videoId = videoIdMatch[1];
 
   // 3. Consultar la API pública móvil de TikTok (Aweme). Si responde con
-  // límite de peticiones (429) o error, reintentar una vez con otro host.
+  // límite de peticiones (429) o error, esperar un poco y reintentar con
+  // otro host.
   const awemeHosts = [
     "api16-normal-c-useast1a.tiktokv.com",
     "api19-normal-c-useast1a.tiktokv.com",
+    "api22-normal-c-useast1a.tiktokv.com",
   ];
   let video: any = null;
   let aweme: any = null;
   let lastError = "";
+  let source: "aweme" | "page" = "aweme";
   for (const host of awemeHosts) {
     try {
       const apiRes = await fetch(`https://${host}/aweme/v1/feed/?aweme_id=${videoId}`, {
@@ -91,6 +94,7 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
       });
       if (!apiRes.ok) {
         lastError = `TIKTOK_API_ERROR_${apiRes.status}`;
+        await new Promise((r) => setTimeout(r, 1500));
         continue;
       }
       const data: any = await apiRes.json();
@@ -131,6 +135,7 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
         const itemStruct = findItem(pageData);
         if (itemStruct?.video) {
           aweme = itemStruct;
+          source = "page";
           // Normalizar a la forma de Aweme (url_list) para el paso siguiente.
           video = {
             ...itemStruct.video,
@@ -151,13 +156,37 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
     throw new Error(lastError || "VIDEO_NOT_FOUND");
   }
 
-  // 5. Preferir el enlace sin marca de agua (download_addr); si no existe,
-  // usar el enlace estándar con marca de agua (play_addr).
+  // 5. Elegir la URL de descarga.
+  // Cuando Aweme responde, la URL principal es play_addr: es el enlace
+  // directo de la CDN de TikTok (v16m) y es el que el reproductor web usa.
+  // download_addr (sin marca de agua) va como segundo formato: su punto
+  // de descarga (api.tiktokv.com) y las URLs de la página (v16-webapp)
+  // han devuelto 403 al descargar desde el teléfono.
+  // Cuando solo hay respaldo de página, se usa lo que haya (downloadAddr
+  // primero, playAddr después).
   const noWatermark = video?.download_addr?.url_list?.[0] as string | undefined;
   const withWatermark = video?.play_addr?.url_list?.[0] as string | undefined;
-  const downloadUrl = forceHttps(noWatermark || withWatermark || "");
+  const primary = source === "aweme" ? withWatermark || noWatermark : noWatermark || withWatermark;
+  const secondary = source === "aweme" ? noWatermark : withWatermark;
+  const downloadUrl = forceHttps(primary || "");
   if (!downloadUrl) {
     throw new Error("DOWNLOAD_URL_NOT_FOUND");
+  }
+  const formats: { download_url: string; format: string; quality: string; watermark: boolean }[] = [
+    {
+      download_url: downloadUrl,
+      format: "mp4",
+      quality: `${(video?.height as number) || 0}p`,
+      watermark: primary === withWatermark,
+    },
+  ];
+  if (secondary && forceHttps(secondary) !== downloadUrl) {
+    formats.push({
+      download_url: forceHttps(secondary),
+      format: "mp4",
+      quality: `${(video?.height as number) || 0}p`,
+      watermark: secondary === withWatermark,
+    });
   }
 
   // 6. Resolver la redirección hacia la CDN final para que el
@@ -170,10 +199,11 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
   }
   console.log("extract_tiktok", JSON.stringify({
     video_id: videoId,
+    source,
     source_host: new URL(downloadUrl).hostname,
     final_host: new URL(finalDownloadUrl).hostname,
     redirected: finalDownloadUrl !== downloadUrl,
-    watermark: !noWatermark,
+    watermark: primary === withWatermark,
   }));
 
   const title = (aweme?.desc as string) || "TikTok Video";
@@ -187,14 +217,12 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
     height: (video?.height as number) || 0,
     download_url: finalDownloadUrl,
     downloadUrl: finalDownloadUrl,
-    watermark: !noWatermark,
-    formats: [
-      {
-        download_url: finalDownloadUrl,
-        format: "mp4",
-        quality: `${(video?.height as number) || 0}p`,
-        watermark: !noWatermark,
-      },
-    ],
+    watermark: primary === withWatermark,
+    formats: formats.map((f) => ({
+      ...f,
+      // La URL final resuelta aplica al formato principal; el segundo
+      // formato conserva su URL original.
+      download_url: f.download_url === downloadUrl ? finalDownloadUrl : f.download_url,
+    })),
   };
 }
