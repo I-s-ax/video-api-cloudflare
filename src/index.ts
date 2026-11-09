@@ -2,6 +2,38 @@ interface Env {
   DB: D1Database;
   BOOTSTRAP_SECRET: string;
   ADMIN_ORIGIN: string;
+  // Servicio de extracción en Google Cloud Run (Python + yt-dlp). Si no
+  // están definidos, la extracción usa el adaptador local (Aweme).
+  CLOUD_RUN_URL: string;
+  CLOUD_RUN_API_KEY: string;
+}
+
+// Extraer a través del servicio Python en Cloud Run. El Worker valida la
+// sesión del usuario y reenvía solo la petición JSON de extracción; el
+// video nunca pasa por aquí: la app lo descarga directo con la URL y las
+// cookies que devuelve el servicio.
+async function extractViaCloudRun(url: string, env: Env): Promise<unknown> {
+  const base = env.CLOUD_RUN_URL.replace(/\/$/, "");
+  const res = await fetch(`${base}/api/v1/extract`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(env.CLOUD_RUN_API_KEY ? { "x-api-key": env.CLOUD_RUN_API_KEY } : {}),
+    },
+    body: JSON.stringify({ url }),
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!res.ok) {
+    let message = `CLOUD_RUN_ERROR_${res.status}`;
+    try {
+      const data: any = await res.json();
+      if (data?.message) message = String(data.message);
+    } catch {
+      // Se ignora: se reporta el código de estado.
+    }
+    throw new Error(message);
+  }
+  return await res.json();
 }
 
 import { extractTikTok } from "./extractors/tiktok";
@@ -244,7 +276,11 @@ async function handle(request: Request, env: Env): Promise<Response> {
     ).bind(auth.user.id,since).first<{n:number}>();
     if ((count?.n || 0) >= 5) return json({ error:"RATE_LIMITED", retry_after:60 },429);
     try {
-      const result = await extractTikTok(input.url);
+      // Si el servicio de Cloud Run está configurado, la extracción va por
+      // yt-dlp; si no, usa el adaptador local (Aweme + respaldo de página).
+      const result = env.CLOUD_RUN_URL
+        ? await extractViaCloudRun(input.url, env)
+        : await extractTikTok(input.url);
       await env.DB.prepare("INSERT INTO extraction_history (id,user_id,platform,status,created_at) VALUES (?,?,?,?,?)")
         .bind(id(),auth.user.id,platform,"success",now()).run();
       return json(result);
