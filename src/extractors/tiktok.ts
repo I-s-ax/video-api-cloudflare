@@ -7,44 +7,12 @@ const USER_AGENT =
 
 // Android bloquea el tráfico en texto plano (cleartext): si TikTok devuelve
 // una URL http://, el DownloadManager la cancela. Forzar siempre https.
-const forceHttps = (u: string): string =>
-  u.startsWith("http://") ? "https://" + u.slice("http://".length) : u;
-
-// Seguir la cadena de redirecciones (301/302) de la URL de descarga y
-// devolver la URL final de la CDN, SIN descargar el cuerpo del video.
-// El DownloadManager de Android elimina las cabeceras personalizadas
-// (User-Agent, Referer) al seguir una redirección entre dominios y la CDN
-// responde 403; con la URL final no hay redirección y las cabeceras se
-// mantienen. Si algo falla, se devuelve la URL original como respaldo.
-async function resolveFinalUrl(startUrl: string): Promise<string> {
-  let current = startUrl;
-  for (let i = 0; i < 5; i++) {
-    let res: Response;
-    try {
-      res = await fetch(current, {
-        method: "GET",
-        redirect: "manual",
-        headers: { "user-agent": USER_AGENT, referer: "https://www.tiktok.com/" },
-      });
-    } catch {
-      return current;
-    }
-    if (res.body) {
-      try {
-        await res.body.cancel();
-      } catch {
-        // Ignorar: solo nos interesa la cabecera Location, no el cuerpo.
-      }
-    }
-    const location = res.headers.get("location");
-    if ([301, 302, 303, 307, 308].includes(res.status) && location) {
-      current = forceHttps(new URL(location, current).toString());
-      continue;
-    }
-    return current;
-  }
-  return current;
-}
+// NOTA: el Worker devuelve la URL limpia, sin resolver redirecciones. La
+// redirección se resuelve en el teléfono (resolveAndDownload en la app):
+// las URLs firmadas de TikTok están atadas a la IP que las pidió, y si el
+// Worker resuelve la redirección, la URL final queda firmada con la IP de
+// Cloudflare y el teléfono recibe 403. Resuelta en el móvil, la firma es
+// con la IP del teléfono.
 
 export type TikTokExtract = {
   platform: "tiktok";
@@ -189,20 +157,12 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
     });
   }
 
-  // 6. Resolver la redirección hacia la CDN final para que el
-  // DownloadManager no tenga que seguirla (y no pierda las cabeceras).
-  let finalDownloadUrl = downloadUrl;
-  try {
-    finalDownloadUrl = await resolveFinalUrl(downloadUrl);
-  } catch {
-    finalDownloadUrl = downloadUrl;
-  }
+  // 6. Devolver la URL limpia (solo con https forzado). La redirección se
+  // resuelve en el teléfono, no aquí: ver nota al inicio del archivo.
   console.log("extract_tiktok", JSON.stringify({
     video_id: videoId,
     source,
     source_host: new URL(downloadUrl).hostname,
-    final_host: new URL(finalDownloadUrl).hostname,
-    redirected: finalDownloadUrl !== downloadUrl,
     watermark: primary === withWatermark,
   }));
 
@@ -215,14 +175,9 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
     duration_ms: (video?.duration as number) || 0,
     width: (video?.width as number) || 0,
     height: (video?.height as number) || 0,
-    download_url: finalDownloadUrl,
-    downloadUrl: finalDownloadUrl,
+    download_url: downloadUrl,
+    downloadUrl,
     watermark: primary === withWatermark,
-    formats: formats.map((f) => ({
-      ...f,
-      // La URL final resuelta aplica al formato principal; el segundo
-      // formato conserva su URL original.
-      download_url: f.download_url === downloadUrl ? finalDownloadUrl : f.download_url,
-    })),
+    formats,
   };
 }
