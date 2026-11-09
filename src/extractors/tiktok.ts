@@ -10,6 +10,42 @@ const USER_AGENT =
 const forceHttps = (u: string): string =>
   u.startsWith("http://") ? "https://" + u.slice("http://".length) : u;
 
+// Seguir la cadena de redirecciones (301/302) de la URL de descarga y
+// devolver la URL final de la CDN, SIN descargar el cuerpo del video.
+// El DownloadManager de Android elimina las cabeceras personalizadas
+// (User-Agent, Referer) al seguir una redirección entre dominios y la CDN
+// responde 403; con la URL final no hay redirección y las cabeceras se
+// mantienen. Si algo falla, se devuelve la URL original como respaldo.
+async function resolveFinalUrl(startUrl: string): Promise<string> {
+  let current = startUrl;
+  for (let i = 0; i < 5; i++) {
+    let res: Response;
+    try {
+      res = await fetch(current, {
+        method: "GET",
+        redirect: "manual",
+        headers: { "user-agent": USER_AGENT, referer: "https://www.tiktok.com/" },
+      });
+    } catch {
+      return current;
+    }
+    if (res.body) {
+      try {
+        await res.body.cancel();
+      } catch {
+        // Ignorar: solo nos interesa la cabecera Location, no el cuerpo.
+      }
+    }
+    const location = res.headers.get("location");
+    if ([301, 302, 303, 307, 308].includes(res.status) && location) {
+      current = forceHttps(new URL(location, current).toString());
+      continue;
+    }
+    return current;
+  }
+  return current;
+}
+
 export type TikTokExtract = {
   platform: "tiktok";
   video_id: string;
@@ -124,6 +160,15 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
     throw new Error("DOWNLOAD_URL_NOT_FOUND");
   }
 
+  // 6. Resolver la redirección hacia la CDN final para que el
+  // DownloadManager no tenga que seguirla (y no pierda las cabeceras).
+  let finalDownloadUrl = downloadUrl;
+  try {
+    finalDownloadUrl = await resolveFinalUrl(downloadUrl);
+  } catch {
+    finalDownloadUrl = downloadUrl;
+  }
+
   const title = (aweme?.desc as string) || "TikTok Video";
   return {
     platform: "tiktok",
@@ -133,12 +178,12 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
     duration_ms: (video?.duration as number) || 0,
     width: (video?.width as number) || 0,
     height: (video?.height as number) || 0,
-    download_url: downloadUrl,
-    downloadUrl,
+    download_url: finalDownloadUrl,
+    downloadUrl: finalDownloadUrl,
     watermark: !noWatermark,
     formats: [
       {
-        download_url: downloadUrl,
+        download_url: finalDownloadUrl,
         format: "mp4",
         quality: `${(video?.height as number) || 0}p`,
         watermark: !noWatermark,
