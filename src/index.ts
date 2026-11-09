@@ -4,6 +4,8 @@ interface Env {
   ADMIN_ORIGIN: string;
 }
 
+import { extractTikTok } from "./extractors/tiktok";
+
 type UserRow = {
   id: string; email: string; password_hash: string; password_salt: string;
   role: string; status: string; created_at: number;
@@ -233,18 +235,25 @@ async function handle(request: Request, env: Env): Promise<Response> {
     const input = await body<{url:string}>(request);
     const platform = allowedPlatform(input.url || "");
     if (!platform) return json({ error:"UNSUPPORTED_OR_INVALID_URL" },400);
+    if (platform !== "tiktok") {
+      return json({ error:"EXTRACTOR_NOT_CONFIGURED", platform, message:"La autenticación funciona, pero el adaptador de extracción aún no está conectado para esta plataforma." },501);
+    }
     const since = now() - 60;
     const count = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM extraction_history WHERE user_id=? AND created_at>=?"
     ).bind(auth.user.id,since).first<{n:number}>();
     if ((count?.n || 0) >= 5) return json({ error:"RATE_LIMITED", retry_after:60 },429);
-    await env.DB.prepare("INSERT INTO extraction_history (id,user_id,platform,status,created_at) VALUES (?,?,?,?,?)")
-      .bind(id(),auth.user.id,platform,"not_configured",now()).run();
-    return json({
-      error:"EXTRACTOR_NOT_CONFIGURED",
-      platform,
-      message:"La autenticación funciona, pero el adaptador de extracción aún no está conectado."
-    },501);
+    try {
+      const result = await extractTikTok(input.url);
+      await env.DB.prepare("INSERT INTO extraction_history (id,user_id,platform,status,created_at) VALUES (?,?,?,?,?)")
+        .bind(id(),auth.user.id,platform,"success",now()).run();
+      return json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "EXTRACTION_FAILED";
+      await env.DB.prepare("INSERT INTO extraction_history (id,user_id,platform,status,created_at) VALUES (?,?,?,?,?)")
+        .bind(id(),auth.user.id,platform,"failed",now()).run();
+      return json({ error:"EXTRACTION_FAILED", platform, message },502);
+    }
   }
 
   return json({ error:"NOT_FOUND" },404);
