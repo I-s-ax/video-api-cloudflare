@@ -5,6 +5,11 @@
 const USER_AGENT =
   "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
 
+// Android bloquea el tráfico en texto plano (cleartext): si TikTok devuelve
+// una URL http://, el DownloadManager la cancela. Forzar siempre https.
+const forceHttps = (u: string): string =>
+  u.startsWith("http://") ? "https://" + u.slice("http://".length) : u;
+
 export type TikTokExtract = {
   platform: "tiktok";
   video_id: string;
@@ -114,7 +119,7 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
   // usar el enlace estándar con marca de agua (play_addr).
   const noWatermark = video?.download_addr?.url_list?.[0] as string | undefined;
   const withWatermark = video?.play_addr?.url_list?.[0] as string | undefined;
-  const downloadUrl = noWatermark || withWatermark;
+  const downloadUrl = forceHttps(noWatermark || withWatermark || "");
   if (!downloadUrl) {
     throw new Error("DOWNLOAD_URL_NOT_FOUND");
   }
