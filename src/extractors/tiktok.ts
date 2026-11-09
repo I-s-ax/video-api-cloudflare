@@ -7,6 +7,9 @@ const USER_AGENT =
 
 // Android bloquea el tráfico en texto plano (cleartext): si TikTok devuelve
 // una URL http://, el DownloadManager la cancela. Forzar siempre https.
+const forceHttps = (u: string): string =>
+  u.startsWith("http://") ? "https://" + u.slice("http://".length) : u;
+
 // NOTA: el Worker devuelve la URL limpia, sin resolver redirecciones. La
 // redirección se resuelve en el teléfono (resolveAndDownload en la app):
 // las URLs firmadas de TikTok están atadas a la IP que las pidió, y si el
