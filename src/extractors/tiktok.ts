@@ -168,6 +168,13 @@ export async function extractTikTok(url: string): Promise<TikTokExtract> {
   } catch {
     finalDownloadUrl = downloadUrl;
   }
+  console.log("extract_tiktok", JSON.stringify({
+    video_id: videoId,
+    source_host: new URL(downloadUrl).hostname,
+    final_host: new URL(finalDownloadUrl).hostname,
+    redirected: finalDownloadUrl !== downloadUrl,
+    watermark: !noWatermark,
+  }));
 
   const title = (aweme?.desc as string) || "TikTok Video";
   return {
