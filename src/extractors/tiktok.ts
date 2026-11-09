@@ -2,8 +2,13 @@
 // Resuelve enlaces cortos (vm.tiktok.com), obtiene el ID del video y consulta
 // la API Aweme para el enlace de descarga directa del MP4.
 
+// La identidad (User-Agent) DEBE ser exactamente la misma que usa la app
+// de Android al descargar: TikTok asocia la URL temporal a esa identidad y
+// la CDN rechaza la descarga (403) si el User-Agent cambia entre la
+// consulta a la API y la descarga. Si se cambia aquí, cambiarlo también
+// en MainActivity.kt (resolveAndDownload).
 const USER_AGENT =
-  "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
+  "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36";
 
 // Android bloquea el tráfico en texto plano (cleartext): si TikTok devuelve
 // una URL http://, el DownloadManager la cancela. Forzar siempre https.
