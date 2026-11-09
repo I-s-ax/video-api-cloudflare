@@ -1,4 +1,4 @@
-// Reemplaza por la URL HTTPS real después de desplegar el Worker.
+// URL real del Worker desplegado.
 window.APP_CONFIG = {
-  API_BASE: "https://REPLACE_WITH_WORKER.workers.dev"
+  API_BASE: "https://video-api-cloudflare.ipromotor03.workers.dev"
 };
